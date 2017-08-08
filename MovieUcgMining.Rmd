@@ -1,0 +1,610 @@
+---
+title: "Fifty Shade Series"
+author: "Tingting QIAN | Yao SHI | Shuyu YANG | Xiaoyou ZHOU"
+date: "2017/5/13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=F,message=F,warning=F}
+library(rvest)
+library(httr)
+library(XML)
+library(reshape2)
+library(ggplot2)
+library(quanteda)
+library(Rfacebook)
+library(RColorBrewer)
+library(corpustools)
+library(twitteR)
+library(httr)
+library(stringr)
+library(stringi)
+load('final0515_3.RData')
+```
+
+# 1. Introduction and research question
+
+### RQ: How to boost the box office figure of Fifty Shades Freed so as to maximize profit for "Universal Studios"?
+
+Universal Studios is an American film studio owned by Comcast and the most controversial films that Universal Studios launched are Fifty Shades of Grey and Fifty Shades Darker that adapted from popular novels trilogy ¡°Fifty Shades¡± series. As we all know, these two films made great commercial success although they got a lot of negative reviews. Also, the sequel to Fifty Shades Darker will be released next year. However, according to the data from metacritic.com, a famous review website for media products, the falling gross with increasing budget and falling critic scores are the main challenges for Universal Studios. Based on these challenges, we proposed a research question: How to boost the sequel of Fifty Shades Freed¡¯s box office figure so as to maximize profit for "Universal Studios"?
+
+Many factors can affect movie success, but an increasing number of studies have emphasized the role of word of mouth (WOM) and expert reviews (e.g., Basuroy, Chatterjee, & Ravid, 2003; Dellarocas, Zhang, & Awad, 2007; Duan, Gu, & Holbrook & Addis, 2007; Moul, 2007; Whinston, 2008; McKenzie, 2009;). These studies have shown that WOM and expert reviews strongly affect movies' box office performance. It is reasonable that WOM and expert reviews are important factors because audiences are likely to rely on others¡¯ reviews when they make movie consumption decisions. 
+
+Based on the studies mentioned above, our study will focus on these two factors, namely, WOM and expert reviews, and learn what are the audience and the experts discussing. Finally, we¡¯ll make conclusions and give advice to the ¡°Universal Studios¡±.
+
+
+# 2. Data gathering (2-3 pages)
+
+a. Movie information(e.g, rating,title,plot) comes from __[IMBD](http://www.omdbapi.com)__ (through open Api).
+b. Movie box office comes from __[The Numbers](http://www.the-numbers.com/movie/Fifty-Shades-Darker#tab=summary)__ 
+c. Movie social network comments comes from __[Facebook](https://www.facebook.com/fiftyshadesmovies/?fref=ts)__(open Api).
+d. Movie soundtrack reviews comes from __[Amazon](https://www.amazon.com/Shades-Original-Motion-Picture-Soundtrack/product-reviews/B00S17FT82/ref=cm_cr_arp_d_paging_btm_2?ie=UTF8&reviewerType=all_reviews&pageNumber=1&pageSize=100&sortBy=helpful)__ .
+e. Movie audience and critic reviews comes from __[Rotten Tomatoes](https://www.rottentomatoes.com/m/fifty_shades_of_grey)__ (open Api).
+
+**For the following codes, we just show the codes of Grey and hide codes for Darker because they are the same.**
+## 2.1 Get basic information from IMBD.
+
+These codes can be seen in our team members' individual assignment, thus, we don't show here.
+
+```{r}
+knitr::kable(MOVIES)
+```
+
+## 2.2 Get box office of two movies from "The numbers" website.
+
+**For "Fifty shades of Grey", we scraped 84 days of box office figure in total.**
+```{r,eval=F,message=F,warning=F}
+box_url = "http://www.the-numbers.com/movie/Fifty-Shades-of-Grey#tab=box-office"
+grey = read_html(box_url)
+subheaders = grey %>% html_nodes("h2") 
+h2 = subheaders[html_text(subheaders) == "Daily Box Office Performance"]
+siblings = html_nodes(h2, xpath = "following-sibling::*")
+next_h2 = which(html_name(siblings) == "h2")[1]
+grey_nodes = siblings[1:(next_h2-1)]
+grey_box = html_nodes(grey_nodes, "table") 
+grey_box = as.data.frame(html_table(grey_box))
+```
+**For "Fifty Shades Darker", we scraped 49 days of box office figure in total.**
+
+## 2.3 Get comments from the Fifty's Facebook official account.
+
+**For "Fifty Shades of Grey", we got 42573 comments of 56 posts on the official acount.**
+```{r,eval=F,message=F,warning=F}
+FBtoken="29401***********AQSo"
+release_date = as.Date("2015-02-13")
+since_date = release_date-10
+until_date = since_date+30
+Grey_facebook = getPage("fiftyshadesmovies", FBtoken, since=since_date, until=until_date, n=200)
+
+comments = list()
+for (q in 1:length(Grey_facebook$id)) {
+  message(Pages$id[q])
+  post = getPost(Pages$id[q], FBtoken, comments = T, n.comments = 1000)
+  if(length(post$comments$message)==0){
+    next
+  } else {
+    pcomments = post$comments
+    pcomments$post = MOVIES$Title[i]
+    comments = c(comments, list(pcomments))}}
+Grey_Comments = plyr::rbind.fill(comments)
+```
+**For Fifty Shades Darker, we got 35905 comments of 64 posts on the official acount.**
+
+## 2.4 Get music reviews from Amazon
+
+We got 500 and 135 reviews from the pages of original motion picture soundtrack of "Fifty Shades of Grey" and "Fifty Shades Darker" respectively.
+
+```{r,eval=F,message=F,warning=F}
+grey_music = data.frame()
+grey_music_reviews = data.frame()
+for (i in 1:50) {
+  url_grey = paste0("https://www.amazon.com/Shades-Original-Motion-Picture-Soundtrack/product-reviews/B00S17FT82/ref=cm_cr_arp_d_viewopt_srt?ie=UTF8&reviewerType=avp_only_reviews&sortBy=helpful&pageNumber=",i)
+  url_grey_review = read_html(url_grey) %>% html_nodes('div .a-section.celwidget')
+  grey_summary = url_grey_review %>% html_nodes('a.a-size-base.a-link-normal.review-title.a-color-base.a-text-bold') %>% html_text() %>% trimws()
+  grey_reviews = url_grey_review %>% html_nodes('span.a-size-base.review-text') %>% html_text() %>% trimws()
+  grey_music = cbind(as.data.frame(grey_summary),as.data.frame(grey_reviews))
+  grey_music_reviews = rbind(grey_music_reviews,grey_music)}
+```
+
+```{r get darker music, echo=F, eval=F}
+darker_music = data.frame()
+darker_music_reviews = data.frame()
+for (i in 1:50) {
+  url_darker = paste0("https://www.amazon.com/Shades-Darker-Original-Picture-Soundtrack/product-reviews/B01MZ8LL9A/ref=cm_cr_arp_d_paging_btm_2?ie=UTF8&reviewerType=avp_only_reviews&sortBy=helpful&pageNumber=",i)
+  url_darker_review = read_html(url_darker) %>% html_nodes('div .a-section.celwidget')
+  darker_summary = url_darker_review %>% html_nodes('a.a-size-base.a-link-normal.review-title.a-color-base.a-text-bold') %>% html_text() %>% trimws()
+  darker_reviews = url_darker_review %>% html_nodes('span.a-size-base.review-text') %>% html_text() %>% trimws()
+  darker_music = cbind(as.data.frame(darker_summary),as.data.frame(darker_reviews))
+  darker_music_reviews = rbind(darker_music_reviews,darker_music)}
+```
+
+## 2.5 Get audience and critic reviews from Rotten Tomatoes
+```{r TM audience reviews, eval=F}
+# (1) define a function to get the "star" score
+get_star<-function(page){
+  stars=page %>% html_nodes("div.col-xs-16")
+  stars_list=c()
+  for (i in c(1:length(stars))){
+    star=stars[i]%>%html_nodes("span.glyphicon.glyphicon-star")
+    star=length(star)
+    stars_list=c(stars_list,star)}
+  stars_list}
+# (2) define a function to get a single page
+get_result_audience<-function(url){
+  page = read_html(url)
+  dates= page %>% html_nodes("span.fr.small.subtle")%>% html_text
+  authors= page %>% html_nodes("div.col-sm-11")%>% html_text
+  authors=authors[-1]
+  contents= page %>% html_nodes("div.user_review") %>% html_text
+  stars=get_star(page)
+  data.frame(date=dates, author=authors, content=contents,star=stars)}
+# (3) define a function to judge when to stop scrape
+judge2<-function(page){
+  p=page %>% html_nodes("span.pageInfo")%>% html_text
+  p=p[1]
+  p = strsplit(p, " ")
+  p=p[[1]]
+  as.numeric(p[2])==51}
+# (4) define a function to scrape all pages
+scrape_thread_audience <- function(path) {
+  url = paste0("https://www.rottentomatoes.com/", path)
+  results = list()
+  while (TRUE) {
+    message(url)
+    page=read_html(url)
+    result= get_result_audience(url)
+    results[[url]] = result
+    path=page %>% html_nodes("a.btn.btn-xs.btn-primary-rt")%>% html_attr("href")
+    path=path[2]
+    url = paste0("https://www.rottentomatoes.com/", path)
+    if (judge2(page)) break}
+  plyr::rbind.fill(results, use.names = F)}
+#(5) define a function to convert time format
+convert2<-function(d_column){
+  date_list=c()
+  for (i in c(1:length(d_column))){
+    dates=d_column
+    date=strsplit(dates[i], ",")
+    m_d=strsplit(date[[1]][1], " ")
+    d_m=paste0(m_d[[1]][2],m_d[[1]][1])
+    y=strsplit(date[[1]][2], " ")
+    d_m_y=paste0(d_m,y[[1]][2])
+    date_list=c(date_list, d_m_y)}
+  date_list=as.Date(date_list, "%d%b%Y")}
+# (6) get all the results and save the files
+grey_audience=scrape_thread_audience("m/fifty_shades_of_grey/reviews/?type=user")
+grey_audience[]<-lapply(grey_audience, as.character)
+grey_audience$date=convert2(grey_audience$date)
+```
+##### *Same for "Fifty Shades Darker" and Similar for critics reviews.
+```{r,eval=F, echo=F}
+darker_audience=scrape_thread_audience("m/fifty_shades_darker/reviews/?type=user")
+darker_audience[]<-lapply(darker_audience, as.character)
+darker_audience$date=convert2(darker_audience$date)
+```
+```{r TM critics reviews, echo=F, eval=F}
+#(1) define a function to get the necessary data of a single page, including the data, author, and content of each review.
+get_result_critic<-function(url){
+  page = read_html(url)
+  dates= page %>% html_nodes("div.review_date")%>% html_text
+  authors= page %>% html_nodes("div a[href^='/critic']")%>% html_text
+  authors=authors[-1]
+  contents= page %>% html_nodes("div.the_review") %>% html_text
+  data.frame(date=dates, author=authors, content=contents)}
+# (2) define a function to judge when to stop
+
+judge<-function(page){
+  p=page %>% html_nodes("span.pageInfo")%>% html_text
+  p=p[1]
+  p = strsplit(p, " ")
+  p=p[[1]]
+  as.numeric(p[2])==as.numeric(p[4])}
+
+# (3) define a function to scrape all pages
+scrape_thread_critic <- function(path) {
+  url = paste0("https://www.rottentomatoes.com/", path)
+  results = list()
+  while (TRUE) {
+    message(url)
+    page=read_html(url)
+    result= get_result_critic(url)
+    results[[url]] = result
+    path=page %>% html_nodes("a.btn.btn-xs.btn-primary-rt")%>% html_attr("href")
+    path=path[2]
+    url = paste0("https://www.rottentomatoes.com/", path)
+    if (judge(page)) break
+    }
+  plyr::rbind.fill(results, use.names = F)
+}
+# (4) convert the data formate
+Sys.setlocale("LC_TIME", "C")
+
+convert<-function(d_column){
+  date_list=c()
+  for (i in c(1:length(d_column))){
+    dates=d_column
+    date=strsplit(dates[i], ",")
+    m_d=strsplit(date[[1]][1], " ")
+    d_m=paste0(m_d[[1]][3],m_d[[1]][2])
+    y=strsplit(date[[1]][2], " ")
+    d_m_y=paste0(d_m,y[[1]][2])
+    date_list=c(date_list, d_m_y)
+  }
+  date_list=as.Date(date_list, "%d%b%Y")
+}
+# (5) get the results and save it.
+grey_critic=scrape_thread_critic("m/fifty_shades_of_grey/reviews/")
+grey_critic[]<-lapply(grey_critic, as.character)
+grey_critic$date=convert(grey_critic$date)
+
+darker_critic=scrape_thread_critic("m/fifty_shades_darker/reviews/")
+darker_critic[]<-lapply(darker_critic, as.character)
+darker_critic$date=convert(darker_critic$date)
+
+```
+
+# 3. Data analysis (2-3 pages)
+## 3.1 Exploratory analysis
+**The exploratory analysis includes 4 parts: 1)Box Office Comparison of I and II; 2)FB Comments Comparison of I and II; 3)Facebook Comments Wordcloud; 4)Amazon Music reviews.**
+```{r, fig.width=8, fig.height=2,message=F,warning=F, echo=F}
+#combine grey and darkers' gross
+grey_darker_box = cbind(grey_box[c("Days","Gross")][1:49,],darker_box[c("Days","Gross")])
+colnames(grey_darker_box) = c("days",'grey',"days2",'darker')
+grey_darker_box = grey_darker_box[-3]
+#melt 2 films gross for plot
+grey_darker_box_plot = reshape2::melt(grey_darker_box,id.var = 'days')
+```
+
+```{r fb comments time, echo=F,eval=F}
+Grey_FB = readRDS("Grey_tweets.rds")
+Darker_FB = readRDS("Darker_tweets.rds")
+Grey_Comments = readRDS("Grey_Comments.rds")
+Darker_Comments = readRDS("Darker_Comments.rds")
+
+Darker_FB$created_time = sub("\\T.*", "", Darker_FB$created_time)
+Darker_FB$created_time = str_sub(Darker_FB$created_time, 6, -1)
+
+Grey_FB$created_time = sub("\\T.*", "", Grey_FB$created_time)
+Grey_FB$created_time = str_sub(Grey_FB$created_time, 6, -1)
+```
+
+```{r fb comments wordcloud,message=F,warning=F,echo=F,eval=F}
+removewords = c("t.co","https","one","get","click","link","go","full","wait","onlin","hd","now","download","free","fifty","shades","grey","darker","movie","film","watch","see",stopwords("english"))
+grey_FB_dfm = dfm(corpus(as.character(Grey_Comments$message)),tolower = T,removePunct = T, removeNumbers=T,removeURL = T,stem = T, remove = removewords)
+darker_FB_dfm = dfm(corpus(as.character(Darker_Comments$message)), tolower = T, removePunct = T, removeNumbers=T,removeURL = T,stem = T, remove = removewords)
+
+```
+
+```{r amazon music,message=F,warning=F,echo=F,eval=F}
+#create corpus and plot wordcloud
+#for grey
+stopwords = c(stopwords("english"),'!')
+grey_music_corpus = corpus(as.character(grey_music_reviews$grey_reviews)) 
+grey_music_dfm = dfm(grey_music_corpus,remove =stopwords,tolower = TRUE,removePunct=T) 
+#for darker
+darker_music_corpus = corpus(as.character(darker_music_reviews$darker_reviews)) 
+darker_music_dfm = dfm(darker_music_corpus,removePunct=T,remove =stopwords,tolower = TRUE) 
+```
+
+```{r,fig.width = 8, fig.height = 6,fig.align="center",message=F,warning=F,echo=F}
+library(gridExtra)
+plot1<-ggplot() + 
+  geom_bar(data=grey_darker_box_plot, aes(color=variable, fill=variable, y=value, x=days),position="dodge", stat="identity")+
+  geom_line(data=grey_box, aes(x=Days, y=Total.Gross, color="grey"), stat = "identity",size=0.8)+
+  geom_line(data=darker_box, aes(x=Days, y=Total.Gross, color="darker"),stat = "identity",size=0.8)+ggtitle("Fig 1: Box Office Comparison of I and II")
+
+plot2<-ggplot()+ggtitle("Fig 2: FB Comments Comparison of I and II")+
+  geom_line(data=Grey_FB, aes(x=created_time, y=comments_count,color="1Grey"),group = 1,size=0.5)+
+  geom_line(data=Darker_FB, aes(x=created_time, y=comments_count,color="2Darker"),group = 1,size=0.5)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5))
+grid.arrange(plot1, plot2,layout_matrix = matrix(c(1,1,2,2), ncol=2, byrow=TRUE))
+```
+From the pictures above, we can see that:
+
+**Figure 1** presents the box office figure trends of Grey and Darker, red color presents "Gery" and green color presents "Darker". It is clear that "Fifty Shades Darker" has a lower daily gross, slower growth rate, and shorter release cycle compared with "Fifty shades of Grey". Also, the trend of daily gross, which are bars in the plot, has a cyclical fluctuation and reach a peak around every 7 days, which means that the daily box office figure is always higher at weekends.
+
+**Figure 2** demonstrates that the number of comments of Grey and Darker changed over time. We can see some peaks during their publicity period, which means some posts had caused heated discussion. We can see that there are some vertical lines in the plot, which is because we did not add the number of comments of each post by a day. This can help us to see the number of comments of a single post on a single day in a more directly way although the lines do not seem coherent.
+
+For Grey (the red line), it can be easily seen that there are three peaks. One was on 4th Feb, and the post was about a movie song of Beyonce. The second one was on 18th Feb and this post was an interactive post about the plot. The last peak was showed on 24th Feb, this post was also an interactive post and it¡¯s about the soundtrack. For Darker, there was only one significant peak appeared on 5th Feb, and it was a movie clip and movie ticket pre-sale notice, which caused a hot discussion. 
+
+**FB comments word clouds** Having a closer look at FB comments word clouds, we found that a lot of positive words such as "love", "like", "enjoy" and "go tonight" are presented on both sides. Another significant word is "book", which was also mentioned a lot in both movies and this might indicate that there is a large proportion of the audiences are fans of the original novels. It's worth noting that the name of main actor "Christian" was mentioned many times on both sides and he was discussed much more than the main actress "Ana".
+
+**Amazon music reviews word clouds** Because of the famous singers Beyonce and Taylor swift, it's not surprising that music in these films has good ratings, the word cloud of review summaries also shows that audiences really like soundtracks of these films.
+
+## 3.2 Sentiment analysis for Facebook comments
+```{r Grey FB senti,eval=F}
+#(1) define positive and negative dictionary
+lexicon = readRDS ("lexicon.rds")
+pos_words = lexicon$word1[lexicon$priorpolarity == "positive"]
+neg_words = lexicon$word1[lexicon$priorpolarity == "negative"]
+dict = dictionary(list(positive=pos_words, negative=neg_words))
+stop = c(stopwords('english'))
+# (2) extract the first 10000 reviews and create dfm
+Greyfbcomments=readRDS("E:/SemesterB/Soc_Media_Data_Acquisit'n&Proc/group/Grey_Comments.rds")
+Grey_senti = Greyfbcomments[1:10000,]
+Grey_senti_dfm = dfm(paste(Grey_senti$message), remove =stop, dictionary=dict)
+# (3) get sentiment score for each facebook reviews 
+Grey_senti_sent = as.data.frame(Grey_senti_dfm)
+Grey_senti$sent = (Grey_senti_sent$positive - Grey_senti_sent$negative) / (Grey_senti_sent$positive + Grey_senti_sent$negative)
+Grey_senti$sent[is.na(Grey_senti$sent)] = 0
+# (4) recognize the reviews as positive or negative
+Grey_senti$attitude=as.factor(ifelse(Grey_senti$sent >= 0, "positive", "negative"))
+Grey_senti$count = 1
+Grey_senti_att = aggregate(Grey_senti["count"], Grey_senti["attitude"], sum)
+```
+
+```{r Darker FB senti, echo=F,eval=F}
+Darkerfbcomments=readRDS("E:/SemesterB/Soc_Media_Data_Acquisit'n&Proc/group/Darker_Comments.rds")
+Darker_senti = Darkerfbcomments[1:10000,]
+Darker_senti_dfm = dfm(paste(Darker_senti$message), remove =stop, dictionary=dict)
+Darker_senti_sent=as.data.frame(Darker_senti_dfm)
+Darker_senti$pos = Darker_senti_sent$positive
+Darker_senti$neg = Darker_senti_sent$negative
+Darker_senti$sent = (Darker_senti_sent$positive - Darker_senti_sent$negative) / (Darker_senti_sent$positive + Darker_senti_sent$negative)
+Darker_senti$sent[is.na (Darker_senti$sent)] = 0
+Darker_senti$attitude = as.factor(ifelse (Darker_senti$sent >= 0, "positive", "negative"))
+Darker_senti$count = 1
+Darker_senti_att = aggregate(Darker_senti["count"], Darker_senti["attitude"], sum)
+```
+```{r}
+data.frame(Film=c("Grey","Darker"),Positive=c(Grey_senti_att$count[2],Darker_senti_att$count[2]),Negative=c(Grey_senti_att$count[1],Darker_senti_att$count[1]),Total=c(Grey_senti_att$count[1]+Grey_senti_att$count[2],Darker_senti_att$count[1]+Darker_senti_att$count[2]))
+```
+From the picture above, we can see that positive comments take a great proportion and the ratio of positive comments of "Darker" even increase a little bit. Therefore, we can say that the fifty series perform well in word-of-mouth marketing among fans on Facebook.
+
+## 3.3 Topic model analysis - Reviews from RottenTomatoes
+
+The reviews data are scraped from Rotten Tomatoes. We get 692 records of Fifty Shades of Grey from audiences, containing the dates, reviewers(authors), reviews(contents), and ratings(stars). For a review with rating score equal and above 2.5, we label it as "positive" and for those under 2.5, they would be considered as "negative".
+
+##3.3.1 Audience Reviews of Fifty Shades of Grey
+```{r grey,error=FALSE,warning=FALSE, message=F,eval=F}
+# 1) Only analyze reviews in the release year(2015)
+grey_audience = grey_audience[grey_audience$date < as.Date("2016-01-01"),]
+# 2#separates the reviews
+grey_audience_neg = subset(grey_audience, (grey_audience$star >= 0) & (grey_audience$star <2.5))
+grey_audience_pos = subset(grey_audience, grey_audience$star > 2.5)
+# 3)reordering the row sequence
+rownames(grey_audience_pos) <- 1:nrow(grey_audience_pos)
+rownames(grey_audience_neg) <- 1:nrow(grey_audience_neg)
+```
+##### *For positive reviews, we create topic model and plot the topics change over time.
+```{r token_positive_grey,warning=FALSE,message=FALSE, results='hide',eval=F}
+#Tokenize positive reviews and convert to topic models
+stops <- c(tm::stopwords("english"),"movie","fifty","shades","film","grey","darker") %>% gofastr::prep_stopwords() 
+grey_pos_token = tokenize(grey_audience_pos$content, removePunct = TRUE,removeNumbers = TRUE)
+grey_pos_dfm = dfm(grey_pos_token,tolower =TRUE, remove=stops)
+grey_pos_topic = convert(grey_pos_dfm, to="topicmodels")
+set.seed(123)
+grey_m_pos = LDA(grey_pos_topic, k = 5, method = "Gibbs", control=list(alpha=.1, iter=100))
+grey_pos_terms = terms(grey_m_pos, 10)
+#Plot topics change over time by using 'lda.plot.time' function
+grey_df_pos = data.frame()
+grey_pos_plot_topics = c("T1", "T2", "T3", "T4", "T5")
+for (i in 1:5){
+  grey_df_single_pos = lda.plot.time(grey_m_pos, topic_nr = i, time_var = grey_audience_pos$date, date_interval = 'month', return.values = T)
+  grey_df_single_pos["topic"] = rep(grey_pos_plot_topics[i],4)
+  grey_df_pos = rbind(grey_df_pos,grey_df_single_pos)
+}
+```
+##### *Do the same for the negative reviews and Plot the trends of topics changes
+```{r token_negative_grey,warning=FALSE,message=FALSE, results='hide',eval=F,echo=F}
+grey_neg_token = tokenize(grey_audience_neg$content, removePunct = TRUE,removeNumbers = TRUE)
+grey_neg_dfm = dfm(grey_neg_token,tolower =TRUE, remove=stopwords("english"))
+grey_neg_topic = convert(grey_neg_dfm, to="topicmodels")
+
+set.seed(123)
+grey_m_neg = LDA(grey_neg_topic, k = 5, method = "Gibbs", control=list(alpha=.1, iter=100))
+grey_neg_terms = terms(grey_m_neg, 10)
+
+#Plot topics change through time by using 'lda.plot.time' function
+grey_df_neg = data.frame()
+grey_neg_plot_topics = c("T1", "T2", "T3", "T4", "T5")
+for (i in 1:5){
+  grey_df_single_neg = lda.plot.time(grey_m_neg, topic_nr = i, time_var = grey_audience_neg$date, date_interval = 'month', return.values = T)
+  grey_df_single_neg["topic"] = rep(grey_neg_plot_topics[i],4)
+  grey_df_neg = rbind(grey_df_neg,grey_df_single_neg)
+}
+```
+
+```{r multiplot,echo=F,message=FALSE,warning=FALSE,error=FALSE}
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL){
+  library(grid)
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  numPlots = length(plots)
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))}
+ if (numPlots==1) {
+    print(plots[[1]])
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    # Make each plot in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))}}}
+```
+```{r plot_grey_positive,fig.width=6,fig.height=5,echo=F,message=FALSE,warning=FALSE,error=FALSE}
+p1 <- ggplot(grey_df_pos,aes(x = time,y =value,color = topic)) + geom_line(size = 0.5)+scale_x_date(date_breaks = "1 month") + ggtitle("Positive audience reviews topics trend")
+p2 <- ggplot(grey_df_neg,aes(x = time,y =value,color = topic)) + geom_line(size = 0.5) +scale_x_date(date_breaks = "1 month") + ggtitle("Negative audience reviews topics trend")
+grid.arrange(p1, p2,layout_matrix = matrix(c(1,1,2,2), ncol=2, byrow=TRUE))
+```
+### For positive reviews:
+From plot 1, we can see that topic 2 is prominent, so let's find out what topic 2 talks about.
+
+```{r topic 2}
+print(grey_pos_terms[,2])
+```
+
+For topic 2, we can see that audiences like to discuss the book and the movie, which indicates that some of the audiences are book fans. However, single words are hard to help us to get a full explanation. Therefore, it is necessary to get some specific reviews that are related to the topic to understand what audiences are talking about.
+```{r reviews grey pos,error=FALSE,warning=FALSE}
+#find out the most representitive texts for topic 2
+topic_per_doc= as.data.frame(topics.per.document(grey_m_pos, as.wordassignments = F))
+topic_per_doc_pos = topic_per_doc[,-1]
+#order the topic_per_doc and find the representitive texts
+grey_audience_pos$content[tail(order(topic_per_doc_pos$X2),5)]
+```
+
+### For nagetive reviews:
+Topic 1 is prominent and topic 1 talks about:
+```{r topic one}
+print(grey_neg_terms[,1])
+```
+For negative reviews, topic 1 is discussed most frequently through time. Topic 1 also discussed the sex plot in the movie and audiences would compared movie with book.
+
+Let's look at some samples:
+```{r reviews_grey_neg,error=FALSE,warning=FALSE,echo=F}
+topic_per_doc= as.data.frame(topics.per.document(grey_m_neg, as.wordassignments = F))
+topic_per_doc_neg = topic_per_doc[,-1]
+grey_audience_neg$content[tail(order(topic_per_doc_neg$X1),5)]
+```
+Compared to the positive reviews, the negative reviews show stronger emotions. "Terrible", "worse" and other negative words are used. Most of the people think the actors did not have chemistry and the sex scenery is not attracting but boring. Also, the plot did not fit the description in the book.
+
+### 3.3.2 Audience reviews of Fifty Shades Darker
+** From here, we don't show the plots and codes because they are similar to those mentioned above.**
+
+### For positive reviews:
+```{r darker pos topic 5}
+print(darker_pos_terms[,5])
+```
+According to the final figure, the most prominent topic of positive audiences' reviews is topic 5 and "book" is discussed a lot, also, "first one" were mentioned. We can see that audiences compared these 2 films but we could not tell which one they think was better here. Therefore, it is necessary to have a look at specific.
+
+The most representitive texts for topic 5 can help us to understand audience reviews.
+Look some samples:
+```{r,error=FALSE,warning=FALSE,echo=F}
+#find out the most representitive texts for topic5
+topic_per_doc= as.data.frame(topics.per.document(darker_m_pos, as.wordassignments = F))
+topic_per_doc_pos = topic_per_doc[,-1]
+#order the topic_per_doc and find the representitive texts
+darker_audience_pos$content[tail(order(topic_per_doc_pos$X5),5)]
+```
+From the detailed comments, we can see that some audiences did think the Darker was better than Grey, and what satisfied them most was the movie follows well of the novel. In addition, they thought the plot of Darker was drama than the first one, which made the audience more enjoyable.
+### For negative reviews:
+```{r}
+print(darker_neg_terms[,3])
+print(darker_neg_terms[,5])
+```
+For negative reviews, topic 5 and topic 3 are both discussed a lot over time. In topic 3, there are many negative words like "worst", terrible", and words like "acting" and "watch" may be the criticisms about actors and film picture. In topic 5, we can see "book" again, and it is noteworthy that "sex" was mentioned in both Darker and Grey's negative topics, so let's see more detailed reviews:
+```{r,error=FALSE,warning=FALSE,echo=F}
+darker_audience_neg$content[tail(order(topic_per_doc_neg$X3),3)]
+darker_audience_neg$content[tail(order(topic_per_doc_neg$X5),3)]
+```
+From the detailed reviews above, we can see that many criticisms are about the stories and plot, people thought the storyline of Darker was a mess, "no plot", "boring"" and so on, they also think sex scenes fell flat, "staging was bad", "no chemistry". 
+Different from the reviews of the first one, people no longer praise actress Dakota anymore, but criticize her acting.
+
+### 3.3.3 Critic reviews of Fifty Shades of Grey and Fifty Shades Darker
+### Fifty Shades of Grey
+```{r critic grey, echo=F,eval=F,warning=FALSE,message=FALSE, results='hide'}
+grey_critic_token = tokenize(grey_critic$content, removePunct = TRUE,removeNumbers = TRUE)
+grey_critic_dfm = dfm(grey_critic_token,tolower =TRUE,remove=stops)
+grey_critic_topics = convert(grey_critic_dfm, to="topicmodels")
+
+set.seed(123)
+m_grey_critic = LDA(grey_critic_topics, k = 5, method = "Gibbs", control=list(alpha=.1, iter=100))
+grey_critic_terms = terms(m_grey_critic, 10)
+
+#Plot topics change through time by using 'lda.plot.time' function
+df_grey_critic = data.frame()
+grey_critic_plot_topics = c("T1", "T2", "T3", "T4", "T5")
+
+for (i in 1:5) {
+  grey_critic_df_single = lda.plot.time(m_grey_critic, topic_nr = i,time_var = grey_critic$date, date_interval = 'month',return.values = T)
+  grey_critic_df_single["topic"] = rep(grey_critic_plot_topics[i],4)
+  df_grey_critic = rbind(df_grey_critic,grey_critic_df_single)
+}
+```
+Topic 2 and topic 4 are discussed by critics most frequentily in different periods.
+
+Topic 2 :
+```{r topic 2 and 4}
+print(grey_critic_terms[,2])
+```
+Some samples:
+```{r reviews_grey_critic_topic 2, error=FALSE, warning=FALSE, echo=F}
+topic_per_doc= as.data.frame(topics.per.document(m_grey_critic, as.wordassignments = F))
+topic_per_doc_grey_critic = topic_per_doc[,-1]
+
+#order the topic_per_doc and find the representitive texts
+grey_critic$content[tail(order(topic_per_doc_grey_critic$X2),5)]
+```
+Some critics think the plots are boring and they also compare the plot with descriptions in books. Others think the sexual parts are not attractive and the movie is romance rather than X-rated film.
+
+Topic 4:
+```{r}
+print(grey_critic_terms[,4])
+```
+Some samples:
+```{r reviews_grey_critic_topic 4, error=FALSE, warning=FALSE,echo=F}
+topic_per_doc= as.data.frame(topics.per.document(m_grey_critic, as.wordassignments = F))
+topic_per_doc_grey_critic = topic_per_doc[,-1]
+grey_critic$content[tail(order(topic_per_doc_grey_critic$X4),5)]
+```
+Some reviews are same as what the audiences said. They are unsatisfied with no chemistry between two actors. And the sexual parts are poor.
+
+### Fifty Shades Darker
+
+Critics talk about topic 1 most of the time.
+```{r topic 1}
+print(darker_critic_terms[,1])
+```
+Some samples:
+```{r reviews grey neg,error=FALSE,warning=FALSE, echo=F}
+topic_per_doc= as.data.frame(topics.per.document(m_darker_critic, as.wordassignments = F))
+topic_per_doc_darker_critic = topic_per_doc[,-1]
+darker_critic$content[tail(order(topic_per_doc_darker_critic$X1),5)]
+```
+In detailed comments, topic 1 has been criticized for the plot and the story. Compared with the first part, Fifty Shades Darker is not better. Fifty Shades Darker is more than a sudsy love story dressed up in erotica. Many critics think the film¡¯s narrative is flat and boring. 
+
+# 4. Conclusion (2-3 pages)
+Based on the analysis, we can see that there are some critical issues of "Fifty series" and the following strategies should be considered if ¡°Universal Studios¡± want to improve the box office figure of Fifty series.
+
+## 4.1 Communication Strategies.
+1. Step up publicity efforts on Friday
+We can see from the plot that the trend of box office has cyclical fluctuations, the gross on Friday and Saturday always higher than other days. That may be because people like to go to the cinema after weekdays . Therefore, the issuers can advertise more on Friday to encourage more people to buy a ticket.
+
+2. Improve Social media Campaign
+From the sentiment analysis of Facebook comments, we suggest that the fifty series should maintain its performance in word-of-mouth marketing among fans on social media. However, compared with fans' reviews on Facebook, moviegoers' and critics' reviews are really negative on the whole. Therefore, the fifty series can try to take advantage of the power of its fans to create a better word-of-mouth advertising, which may, in turn, help the Fifty Shades Freed to improve the box office figure. In terms of Facebook, we can see that post includes a romantic video clip or interactive content can cause a hot discussion. Also, from the word cloud of Facebook comments, we can see "love" and "Christian" (the main actor) are the focus of audiences.
+Therefore, the Facebook official account can post more positive emotional arousal video clip, use more content about "Christian" to attract female audiences and interact more with book fans.
+
+3. Maintain the quality of soundtracks.
+From Amazon reviews, we can learn that people are really satisfied with the soundtracks of both two movies. So, maintaining the quality of music is also important, and issuer can also take advantage of the power of singers¡¯ fans to attract more latent audiences.
+
+## 4.2 Film-making
+
+1. Change the director
+From the reviews and comments, it seems that audiences are disappointed with the director and the story line and some sex scenes of Fifty Shades Darker. The producer may consider changing director. Moreover, we recommend some directors for the issuer based on IMDB. The final result shows that Joseph Gordon-Levitt is a suitable director.
+```{r}
+Movies=readRDS("C:/Users/lenovo/Documents/WeChat Files/wxid_u5fnz06r364r21/Files/connection_movie.rds")
+#find films rated R (Restriction Level) and Romance
+imdb_R = subset(Movies,Movies$Rated =="R")
+imdb_R$Genre = as.character(imdb_R$Genre)
+imdb_R_Romance = subset(imdb_R,grepl('Romance',imdb_R$Genre))
+#find the plot contains "sex" which is similar to fifty shades
+imdb_R_Romance_bf = subset(connection,connection$Title %in% imdb_R_Romance$Title)
+imdb_R_Romance_bf = subset(imdb_R_Romance_bf,grepl('sex',imdb_R_Romance_bf$Plot))
+#find the director whose movie has the highest rating.
+imdb_R_Romance_recomm = subset(imdb_R_Romance_bf,imdb_R_Romance_bf$imdbRating == max(imdb_R_Romance_bf$imdbRating))
+imdb_R_Romance_recomm$Director
+```
+
+2. Keep following the original novel
+From the topic model of audience¡¯s reviews, we can conclude that Universal Studios should keep following the original novel, and avoid dissatisfying the book fans.
+
+3. Improve acting
+The lack of interaction and chemistry between two actors, poor acting, and loss of key part in the book are what audiences are unsatisfied with. Therefore, it¡¯s important for the actors to improve their performance.
+
+4. More erotic and More elaborate sex plots
+From the topic model analysis, we can make a summary that both audience and critics would like to compare the book content with the plot of the movie. The plain sexual scenery really disappointed the audiences. Therefore, more erotic and more elaborate sex plots should be added.
+
